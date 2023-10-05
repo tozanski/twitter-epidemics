@@ -2,6 +2,7 @@ module TwitterCascades
 
 export CASCADE_ALGO
 using JLD2
+using Random
 using DataStructures
 using Distributions
 using Distributed
@@ -9,6 +10,50 @@ using SparseArrays
 using SharedArrays
 
 @enum CASCADE_ALGO single multitry multi
+
+edges(adj::SparseMatrixCSC{E,V}, v::Integer) where {V<:Integer, E} = adj.colptr[v] : (adj.colptr[v+1] - 1)
+neighbors(adj::SparseMatrixCSC{E,V}, v::Integer) where {V<:Integer, E} = view(adj.rowval, edges(adj, v))
+
+function timed_cascade(
+  rng::AbstractRNG,
+  adj::SparseMatrixCSC{E,V},
+  start::Integer,
+  time_distribution::UnivariateDistribution{Support},
+  forward::Bool) where {V<:Integer,E,Support}
+
+  N, M = size(adj)
+  @assert N == M
+  @assert start > 0
+  @assert start <= N
+
+  if forward
+    adj = copy(adj')
+  end
+  adj::SparseMatrixCSC{E,V}
+
+  receive_times = fill(NaN32, N)
+  queue = Pair{Float32,V}[ 0.0 => start ]
+
+  while !isempty(queue)
+    received_time, vertex = heappop!(queue)
+    if !isnan(receive_times[vertex])
+      continue
+    end
+    receive_times[vertex] = received_time
+    retweet_time = received_time + rand(rng, time_distribution)
+
+    @inbounds firstedge = adj.colptr[vertex]
+    @inbounds lastedge = adj.colptr[vertex+1] - 1
+    for edge in firstedge : lastedge
+      @inbounds neighbor = adj.rowval[edge]
+      @inbounds if !isnan(receive_times[neighbor])
+        continue
+      end
+      heappush!(queue, retweet_time => neighbor)
+    end
+  end
+  return receive_times
+end
 
 function cascade_single(
   adj::SparseMatrixCSC{E,V},
