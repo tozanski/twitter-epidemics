@@ -18,8 +18,8 @@ function timed_cascade(
   rng::AbstractRNG,
   adj::SparseMatrixCSC{E,V},
   start::Integer,
-  time_distribution::UnivariateDistribution{Support},
-  forward::Bool) where {V<:Integer,E,Support}
+  time_distribution::UnivariateDistribution{Support};
+  forward::Bool=true) where {V<:Integer,E,Support}
 
   N, M = size(adj)
   @assert N == M
@@ -40,7 +40,9 @@ function timed_cascade(
       continue
     end
     receive_times[vertex] = received_time
-    retweet_time = received_time + rand(rng, time_distribution)
+    retweet_delay = rand(rng, time_distribution)
+    @assert 0 < retweet_delay
+    retweet_time = received_time + retweet_delay
 
     @inbounds firstedge = adj.colptr[vertex]
     @inbounds lastedge = adj.colptr[vertex+1] - 1
